@@ -43,6 +43,10 @@ export function AppShell({ children, profile }: { children: React.ReactNode; pro
         <aside className="rounded-[28px] border border-white/60 bg-white/80 p-3 shadow-card">
           <nav className="space-y-2">
             {navItems.map((item) => {
+              if (item.href === "/contacts/new" && profile.role !== "admin") {
+                return null;
+              }
+
               const Icon = item.icon;
               const active = pathname === item.href || (item.href === "/contacts" && pathname.startsWith("/contacts"));
               return (
