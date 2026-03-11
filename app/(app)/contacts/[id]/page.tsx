@@ -138,7 +138,7 @@ export default async function ContactDetailPage({ params, searchParams }: Props)
             ) : null}
           </Card>
 
-          {isEditing ? (
+          {isEditing && (
             <Card>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -151,7 +151,7 @@ export default async function ContactDetailPage({ params, searchParams }: Props)
                 <ContactForm action={updateContactAction} contact={typedContact} submitLabel="Guardar cambios" />
               </div>
             </Card>
-          ) : null}
+          )}
         </div>
 
         <div className="space-y-6">
