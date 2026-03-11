@@ -12,7 +12,7 @@ function hasValue(value: string | null | undefined) {
 }
 
 type Props = {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; error?: string; success?: string }>;
 };
 
 type ContactRow = Pick<Contact, "id" | "full_name" | "city" | "company" | "phone" | "raw_capture" | "updated_at">;
@@ -34,9 +34,10 @@ function compactContext(value: string | null) {
 }
 
 export default async function ContactsPage({ searchParams }: Props) {
-  const { supabase } = await requireUser();
+  const { supabase, profile } = await requireUser();
   const params = await searchParams;
   const currentQuery = params.q?.trim() || "";
+  const canManage = profile.role === "admin";
   let query = supabase.from("contacts").select("id, full_name, city, company, phone, raw_capture, updated_at").order("updated_at", { ascending: false });
 
   if (currentQuery) {
@@ -135,10 +136,15 @@ export default async function ContactsPage({ searchParams }: Props) {
             <p className="text-sm uppercase tracking-[0.25em] text-ink/45">Base comercial</p>
             <h2 className="mt-2 text-3xl font-semibold">Contactos</h2>
           </div>
-          <Link href="/contacts/new" className="rounded-2xl bg-ink px-5 py-3 text-sm font-semibold text-white transition hover:bg-teal">
-            Crear contacto
-          </Link>
+          {canManage ? (
+            <Link href="/contacts/new" className="rounded-2xl bg-ink px-5 py-3 text-sm font-semibold text-white transition hover:bg-teal">
+              Crear contacto
+            </Link>
+          ) : null}
         </div>
+
+        {params.success ? <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{params.success}</div> : null}
+        {params.error ? <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{params.error}</div> : null}
 
         <form className="mt-6 grid gap-3 md:grid-cols-[1fr_auto]">
           <input
@@ -152,7 +158,7 @@ export default async function ContactsPage({ searchParams }: Props) {
       </Card>
 
       <Card className="overflow-hidden p-0">
-        <ContactsList contacts={listItems} deleteAction={deleteContactsAction} />
+        <ContactsList contacts={listItems} deleteAction={deleteContactsAction} canManage={canManage} />
       </Card>
     </PageShell>
   );

@@ -1,8 +1,17 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
 import { createContactAction } from "@/app/(app)/actions";
 import { ContactForm } from "@/components/contact-form";
 import { Card, PageShell } from "@/components/ui";
+import { requireUser } from "@/lib/auth";
 
-export default function NewContactPage() {
+export default async function NewContactPage() {
+  const { profile } = await requireUser();
+
+  if (profile.role !== "admin") {
+    redirect("/contacts");
+  }
+
   return (
     <PageShell>
       <Card>

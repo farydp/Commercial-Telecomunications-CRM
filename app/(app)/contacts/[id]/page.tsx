@@ -39,10 +39,11 @@ function formatEntryBadge(item: ContactUpdate) {
 }
 
 export default async function ContactDetailPage({ params, searchParams }: Props) {
-  const { supabase } = await requireUser();
+  const { supabase, profile } = await requireUser();
   const { id } = await params;
   const { error, success, edit } = await searchParams;
-  const isEditing = edit === "1";
+  const canManage = profile.role === "admin";
+  const isEditing = canManage && edit === "1";
 
   const [{ data: contact }, { data: updates = [] }] = await Promise.all([
     supabase.from("contacts").select("*").eq("id", id).single(),
@@ -95,18 +96,22 @@ export default async function ContactDetailPage({ params, searchParams }: Props)
                 <Link href="/contacts" className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-ink transition hover:bg-sand">
                   Volver a contactos
                 </Link>
-                <Link
-                  href={isEditing ? `/contacts/${typedContact.id}` : `/contacts/${typedContact.id}?edit=1`}
-                  className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-ink transition hover:bg-sand"
-                >
-                  {isEditing ? "Cancelar" : "Editar"}
-                </Link>
-                <DeleteContactButton
-                  contactId={typedContact.id}
-                  contactName={contactName}
-                  deleteAction={deleteContactsAction}
-                  redirectToContacts
-                />
+                {canManage ? (
+                  <>
+                    <Link
+                      href={isEditing ? `/contacts/${typedContact.id}` : `/contacts/${typedContact.id}?edit=1`}
+                      className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-ink transition hover:bg-sand"
+                    >
+                      {isEditing ? "Cancelar" : "Editar"}
+                    </Link>
+                    <DeleteContactButton
+                      contactId={typedContact.id}
+                      contactName={contactName}
+                      deleteAction={deleteContactsAction}
+                      redirectToContacts
+                    />
+                  </>
+                ) : null}
                 <div className="rounded-2xl bg-sand px-4 py-3 text-right">
                   <p className="text-xs uppercase tracking-[0.2em] text-ink/45">Actualizado</p>
                   <p className="mt-2 text-sm font-medium">{format(parseISO(typedContact.updated_at), "dd MMM yyyy", { locale: es })}</p>
@@ -155,14 +160,16 @@ export default async function ContactDetailPage({ params, searchParams }: Props)
         </div>
 
         <div className="space-y-6">
-          <Card>
-            <p className="text-sm uppercase tracking-[0.25em] text-ink/45">Seguimiento</p>
-            <h3 className="mt-2 text-2xl font-semibold">Registrar interaccion o proximo paso</h3>
-            <p className="mt-3 text-sm leading-6 text-ink/60">
-              Guarda interacciones realizadas o deja programado el siguiente movimiento comercial sin mezclar ambos conceptos.
-            </p>
-            <UpdateForm action={createUpdateAction} contactId={typedContact.id} />
-          </Card>
+          {canManage ? (
+            <Card>
+              <p className="text-sm uppercase tracking-[0.25em] text-ink/45">Seguimiento</p>
+              <h3 className="mt-2 text-2xl font-semibold">Registrar interaccion o proximo paso</h3>
+              <p className="mt-3 text-sm leading-6 text-ink/60">
+                Guarda interacciones realizadas o deja programado el siguiente movimiento comercial sin mezclar ambos conceptos.
+              </p>
+              <UpdateForm action={createUpdateAction} contactId={typedContact.id} />
+            </Card>
+          ) : null}
 
           <Card>
             <p className="text-sm uppercase tracking-[0.25em] text-ink/45">Timeline</p>

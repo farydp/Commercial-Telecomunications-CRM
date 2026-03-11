@@ -2,11 +2,23 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import type { Route } from "next";
 import { requireUser } from "@/lib/auth";
+
+const WRITE_ACCESS_DENIED_MESSAGE = "No tienes permisos para modificar contactos.";
 
 function nullIfEmpty(value: FormDataEntryValue | null) {
   const normalized = String(value || "").trim();
   return normalized.length > 0 ? normalized : null;
+}
+
+function isAdmin(role: string) {
+  return role === "admin";
+}
+
+function withErrorMessage(path: string, message: string): Route {
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}error=${encodeURIComponent(message)}` as Route;
 }
 
 export type DeleteContactsResult = {
@@ -22,7 +34,11 @@ export async function signOutAction() {
 }
 
 export async function createContactAction(formData: FormData) {
-  const { supabase, user } = await requireUser();
+  const { supabase, user, profile } = await requireUser();
+
+  if (!isAdmin(profile.role)) {
+    redirect(withErrorMessage("/contacts", WRITE_ACCESS_DENIED_MESSAGE));
+  }
 
   const payload = {
     full_name: nullIfEmpty(formData.get("full_name")),
@@ -71,8 +87,12 @@ export async function createContactAction(formData: FormData) {
 }
 
 export async function updateContactAction(formData: FormData) {
-  const { supabase } = await requireUser();
+  const { supabase, profile } = await requireUser();
   const contactId = String(formData.get("id") || "");
+
+  if (!isAdmin(profile.role)) {
+    redirect(withErrorMessage(`/contacts/${contactId}`, WRITE_ACCESS_DENIED_MESSAGE));
+  }
 
   const payload = {
     full_name: nullIfEmpty(formData.get("full_name")),
@@ -100,11 +120,19 @@ export async function updateContactAction(formData: FormData) {
 }
 
 export async function deleteContactsAction(formData: FormData): Promise<DeleteContactsResult> {
-  const { supabase, user } = await requireUser();
+  const { supabase, user, profile } = await requireUser();
   const contactIds = formData
     .getAll("contact_ids")
     .map((value) => String(value || "").trim())
     .filter(Boolean);
+
+  if (!isAdmin(profile.role)) {
+    return {
+      ok: false,
+      message: WRITE_ACCESS_DENIED_MESSAGE,
+      deletedIds: []
+    };
+  }
 
   if (contactIds.length === 0) {
     return {
@@ -192,9 +220,13 @@ export async function deleteContactsAction(formData: FormData): Promise<DeleteCo
 }
 
 export async function createUpdateAction(formData: FormData) {
-  const { supabase, user } = await requireUser();
+  const { supabase, user, profile } = await requireUser();
   const contactId = String(formData.get("contact_id") || "");
   const note = String(formData.get("note") || "").trim();
+
+  if (!isAdmin(profile.role)) {
+    redirect(withErrorMessage(`/contacts/${contactId}`, WRITE_ACCESS_DENIED_MESSAGE));
+  }
 
   if (!note) {
     redirect(`/contacts/${contactId}?error=${encodeURIComponent("Agrega un resumen antes de guardar el registro.")}`);
