@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Route } from "next";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { deleteContactsAction } from "@/app/(app)/actions";
@@ -7,12 +8,14 @@ import { Card, PageShell } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import type { Contact, ContactUpdate } from "@/lib/types";
 
+const PAGE_SIZE = 10;
+
 function hasValue(value: string | null | undefined) {
   return Boolean(value && value.trim().length > 0);
 }
 
 type Props = {
-  searchParams: Promise<{ q?: string; error?: string; success?: string }>;
+  searchParams: Promise<{ q?: string; error?: string; success?: string; page?: string }>;
 };
 
 type ContactRow = Pick<Contact, "id" | "full_name" | "city" | "company" | "phone" | "raw_capture" | "updated_at">;
@@ -33,18 +36,43 @@ function compactContext(value: string | null) {
   return normalized.length > 96 ? `${normalized.slice(0, 93)}...` : normalized;
 }
 
+function buildContactsPageHref(page: number, currentQuery: string): Route {
+  const params = new URLSearchParams();
+
+  if (currentQuery) {
+    params.set("q", currentQuery);
+  }
+
+  if (page > 1) {
+    params.set("page", String(page));
+  }
+
+  const queryString = params.toString();
+  return (queryString ? `/contacts?${queryString}` : "/contacts") as Route;
+}
+
 export default async function ContactsPage({ searchParams }: Props) {
   const { supabase, profile } = await requireUser();
   const params = await searchParams;
   const currentQuery = params.q?.trim() || "";
+  const requestedPage = Number(params.page || "1");
+  const currentPage = Number.isFinite(requestedPage) && requestedPage > 0 ? Math.floor(requestedPage) : 1;
   const canManage = profile.role === "admin";
-  let query = supabase.from("contacts").select("id, full_name, city, company, phone, raw_capture, updated_at").order("updated_at", { ascending: false });
+  const from = (currentPage - 1) * PAGE_SIZE;
+  const to = from + PAGE_SIZE - 1;
+  let query = supabase
+    .from("contacts")
+    .select("id, full_name, city, company, phone, raw_capture, updated_at", { count: "exact" })
+    .order("updated_at", { ascending: false })
+    .range(from, to);
 
   if (currentQuery) {
     query = query.or(`full_name.ilike.%${currentQuery}%,company.ilike.%${currentQuery}%,phone.ilike.%${currentQuery}%,email.ilike.%${currentQuery}%`);
   }
 
-  const { data: contacts = [] } = await query;
+  const { data: contacts = [], count = 0 } = await query;
+  const totalContacts = count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalContacts / PAGE_SIZE));
   const typedContacts = contacts as ContactRow[];
   const contactIds = typedContacts.map((contact) => contact.id);
   const { data: updates = [] } = contactIds.length
@@ -60,6 +88,10 @@ export default async function ContactsPage({ searchParams }: Props) {
   const duplicatePhones = new Set(phones.filter((phone, index) => phones.indexOf(phone) !== index));
   const latestUpdateByContact = new Map<string, ContactListUpdate>();
   const pendingUpdateByContact = new Map<string, ContactListUpdate>();
+  const visibleFrom = totalContacts === 0 ? 0 : from + 1;
+  const visibleTo = totalContacts === 0 ? 0 : from + typedContacts.length;
+  const hasPreviousPage = currentPage > 1;
+  const hasNextPage = currentPage < totalPages;
 
   typedUpdates.forEach((item) => {
     if (!latestUpdateByContact.has(item.contact_id)) {
@@ -157,9 +189,45 @@ export default async function ContactsPage({ searchParams }: Props) {
         </form>
       </Card>
 
+      <Card>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-ink/60">
+            Mostrando {visibleFrom}-{visibleTo} de {totalContacts} contacto{totalContacts === 1 ? "" : "s"}
+          </p>
+          {totalContacts > PAGE_SIZE ? <p className="text-xs uppercase tracking-[0.18em] text-ink/45">Pagina {currentPage} de {totalPages}</p> : null}
+        </div>
+      </Card>
+
       <Card className="overflow-hidden p-0">
         <ContactsList contacts={listItems} deleteAction={deleteContactsAction} canManage={canManage} />
       </Card>
+
+      {totalContacts > PAGE_SIZE ? (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Link
+            href={hasPreviousPage ? buildContactsPageHref(currentPage - 1, currentQuery) : "#"}
+            aria-disabled={!hasPreviousPage}
+            className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+              hasPreviousPage
+                ? "border border-slate-200 bg-white text-ink hover:bg-sand"
+                : "pointer-events-none border border-slate-200 bg-slate-100 text-slate-400"
+            }`}
+          >
+            Anterior
+          </Link>
+          <Link
+            href={hasNextPage ? buildContactsPageHref(currentPage + 1, currentQuery) : "#"}
+            aria-disabled={!hasNextPage}
+            className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+              hasNextPage
+                ? "border border-slate-200 bg-white text-ink hover:bg-sand"
+                : "pointer-events-none border border-slate-200 bg-slate-100 text-slate-400"
+            }`}
+          >
+            Siguiente
+          </Link>
+        </div>
+      ) : null}
     </PageShell>
   );
 }
