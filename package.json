@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "trujiconnect",
   "version": "0.1.0",
   "private": true,
@@ -6,8 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "lint": "node scripts/lint.mjs",
+    "typecheck": "tsc --noEmit",
+    "check:env": "node scripts/check-env.mjs",
+    "verify:deploy": "npm run check:env && npm run lint && npm run typecheck && npm run build",
+    "deploy:preview": "node scripts/vercel-preview.mjs",
+    "deploy:prod": "node scripts/vercel-preview.mjs --prod"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
@@ -34,5 +38,6 @@
     "typescript": "^5.8.3"
   }
 }
+
 
 

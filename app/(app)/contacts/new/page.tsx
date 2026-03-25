@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { redirect } from "next/navigation";
+﻿import { redirect } from "next/navigation";
 import { createContactAction } from "@/app/(app)/actions";
 import { ContactForm } from "@/components/contact-form";
 import { Card, PageShell } from "@/components/ui";
@@ -27,3 +26,4 @@ export default async function NewContactPage() {
     </PageShell>
   );
 }
+
