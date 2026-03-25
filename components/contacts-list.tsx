@@ -1,8 +1,13 @@
 "use client";
 
+import type { Route } from "next";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import type { DeleteContactsResult } from "@/app/(app)/actions";
+
+type SortField = "company" | "person";
+type SortDirection = "asc" | "desc";
 
 type ContactsListItem = {
   id: string;
@@ -24,14 +29,103 @@ const toneClasses = {
   empty: "bg-transparent text-ink/55"
 } as const;
 
+function buildSortHref(pathname: string, searchParams: URLSearchParams, sortField: SortField, sortDirection: SortDirection): Route {
+  const params = new URLSearchParams(searchParams.toString());
+
+  params.delete("page");
+
+  if (sortField === "company") {
+    params.delete("sortField");
+  } else {
+    params.set("sortField", sortField);
+  }
+
+  if (sortDirection === "asc") {
+    params.delete("sortDirection");
+  } else {
+    params.set("sortDirection", sortDirection);
+  }
+
+  const queryString = params.toString();
+  return (queryString ? `${pathname}?${queryString}` : pathname) as Route;
+}
+
+function SortControl({
+  sortField,
+  sortDirection
+}: {
+  sortField: SortField;
+  sortDirection: SortDirection;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [field, setField] = useState<SortField>(sortField);
+  const [direction, setDirection] = useState<SortDirection>(sortDirection);
+
+  useEffect(() => {
+    setField(sortField);
+  }, [sortField]);
+
+  useEffect(() => {
+    setDirection(sortDirection);
+  }, [sortDirection]);
+
+  function applySort(nextField: SortField, nextDirection: SortDirection) {
+    const nextHref = buildSortHref(pathname, new URLSearchParams(searchParams.toString()), nextField, nextDirection);
+    router.replace(nextHref, { scroll: false });
+  }
+
+  return (
+    <details className="relative w-full sm:w-auto">
+      <summary className="flex cursor-pointer list-none items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:bg-sand sm:justify-start">
+        <span aria-hidden="true">?</span>
+        Ordenar
+      </summary>
+      <div className="mt-2 w-full rounded-2xl border border-slate-200 bg-white p-3 shadow-lg sm:absolute sm:left-0 sm:z-10 sm:mt-3 sm:w-64">
+        <div className="grid gap-3">
+          <select
+            value={field}
+            onChange={(event) => {
+              const nextField = event.target.value as SortField;
+              setField(nextField);
+              applySort(nextField, direction);
+            }}
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-teal"
+          >
+            <option value="company">Empresa</option>
+            <option value="person">Nombre</option>
+          </select>
+          <select
+            value={direction}
+            onChange={(event) => {
+              const nextDirection = event.target.value as SortDirection;
+              setDirection(nextDirection);
+              applySort(field, nextDirection);
+            }}
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-teal"
+          >
+            <option value="asc">Ascendente</option>
+            <option value="desc">Descendente</option>
+          </select>
+        </div>
+      </div>
+    </details>
+  );
+}
+
 export function ContactsList({
   contacts,
   deleteAction,
-  canManage
+  canManage,
+  sortField,
+  sortDirection
 }: {
   contacts: ContactsListItem[];
   deleteAction: (formData: FormData) => Promise<DeleteContactsResult>;
   canManage: boolean;
+  sortField: SortField;
+  sortDirection: SortDirection;
 }) {
   const [rows, setRows] = useState(contacts);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -104,16 +198,19 @@ export function ContactsList({
             {feedback.message}
           </div>
         ) : <div />}
-        {canManage ? (
-          <button
-            type="button"
-            onClick={handleBulkDelete}
-            disabled={!hasSelection || isPending}
-            className="w-full rounded-2xl border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 transition enabled:hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 sm:w-auto"
-          >
-            Eliminar seleccionados
-          </button>
-        ) : null}
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+          <SortControl sortField={sortField} sortDirection={sortDirection} />
+          {canManage ? (
+            <button
+              type="button"
+              onClick={handleBulkDelete}
+              disabled={!hasSelection || isPending}
+              className="w-full rounded-2xl border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 transition enabled:hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400 sm:w-auto"
+            >
+              Eliminar seleccionados
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="space-y-3 p-4 md:hidden">
@@ -129,8 +226,8 @@ export function ContactsList({
                     <Link href={`/contacts/${contact.id}`} className="block break-words font-semibold text-ink hover:text-teal">
                       {contact.fullName}
                     </Link>
+                    {contact.company ? <p className="mt-1 break-words text-[15px] font-semibold text-ink/85">{contact.company}</p> : null}
                     {contact.phone ? <p className="mt-2 break-words text-sm font-medium text-ink">{contact.phone}</p> : null}
-                    {contact.company ? <p className="mt-1 break-words text-sm text-ink/70">{contact.company}</p> : null}
                     {contact.location ? <p className="mt-1 text-xs uppercase tracking-[0.12em] text-ink/50">{contact.location}</p> : null}
                   </div>
                   {canManage ? (
@@ -217,8 +314,8 @@ export function ContactsList({
                       <Link href={`/contacts/${contact.id}`} className="font-semibold text-ink hover:text-teal">
                         {contact.fullName}
                       </Link>
+                      {contact.company ? <p className="mt-1 text-[15px] font-semibold text-ink/85">{contact.company}</p> : null}
                       {contact.phone ? <p className="mt-2 text-sm font-medium text-ink">{contact.phone}</p> : null}
-                      {contact.company ? <p className="mt-2 text-sm text-ink/70">{contact.company}</p> : null}
                       {contact.location ? <p className="mt-1 text-xs uppercase tracking-[0.12em] text-ink/50">{contact.location}</p> : null}
                     </td>
                     <td className="px-5 py-4">

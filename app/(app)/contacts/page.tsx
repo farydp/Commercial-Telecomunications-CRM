@@ -1,23 +1,34 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import type { Route } from "next";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { deleteContactsAction } from "@/app/(app)/actions";
+import { ContactsControls } from "@/components/contacts-controls";
 import { ContactsList } from "@/components/contacts-list";
 import { Card, PageShell } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import type { Contact, ContactUpdate } from "@/lib/types";
 
 const PAGE_SIZE = 10;
-const ORDER_OPTIONS = ["", "asc", "desc"] as const;
-type SortOrder = (typeof ORDER_OPTIONS)[number];
+const SORT_FIELDS = ["company", "person"] as const;
+const SORT_DIRECTIONS = ["asc", "desc"] as const;
+type SortField = (typeof SORT_FIELDS)[number];
+type SortDirection = (typeof SORT_DIRECTIONS)[number];
 
 function hasValue(value: string | null | undefined) {
   return Boolean(value && value.trim().length > 0);
 }
 
 type Props = {
-  searchParams: Promise<{ q?: string; error?: string; success?: string; page?: string; nameOrder?: string; companyOrder?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    success?: string;
+    page?: string;
+    company?: string;
+    person?: string;
+    sortField?: string;
+    sortDirection?: string;
+  }>;
 };
 
 type ContactRow = Pick<Contact, "id" | "full_name" | "city" | "company" | "phone" | "raw_capture" | "updated_at">;
@@ -38,23 +49,37 @@ function compactContext(value: string | null) {
   return normalized.length > 96 ? `${normalized.slice(0, 93)}...` : normalized;
 }
 
-function parseSortOrder(value?: string): SortOrder {
-  return ORDER_OPTIONS.includes(value as SortOrder) ? (value as SortOrder) : "";
+function parseSortField(value?: string): SortField {
+  return SORT_FIELDS.includes(value as SortField) ? (value as SortField) : "company";
 }
 
-function buildContactsPageHref(page: number, currentQuery: string, nameOrder: SortOrder, companyOrder: SortOrder): Route {
+function parseSortDirection(value?: string): SortDirection {
+  return SORT_DIRECTIONS.includes(value as SortDirection) ? (value as SortDirection) : "asc";
+}
+
+function buildContactsPageHref(
+  page: number,
+  companyPrefix: string,
+  personPrefix: string,
+  sortField: SortField,
+  sortDirection: SortDirection
+): Route {
   const params = new URLSearchParams();
 
-  if (currentQuery) {
-    params.set("q", currentQuery);
+  if (companyPrefix) {
+    params.set("company", companyPrefix);
   }
 
-  if (nameOrder) {
-    params.set("nameOrder", nameOrder);
+  if (personPrefix) {
+    params.set("person", personPrefix);
   }
 
-  if (companyOrder) {
-    params.set("companyOrder", companyOrder);
+  if (sortField !== "company") {
+    params.set("sortField", sortField);
+  }
+
+  if (sortDirection !== "asc") {
+    params.set("sortDirection", sortDirection);
   }
 
   if (page > 1) {
@@ -68,9 +93,11 @@ function buildContactsPageHref(page: number, currentQuery: string, nameOrder: So
 export default async function ContactsPage({ searchParams }: Props) {
   const { supabase, profile } = await requireUser();
   const params = await searchParams;
-  const currentQuery = params.q?.trim() || "";
-  const nameOrder = parseSortOrder(params.nameOrder);
-  const companyOrder = parseSortOrder(params.companyOrder);
+  const companyPrefix = params.company?.trim() || "";
+  const personPrefix = params.person?.trim() || "";
+  const sortField = parseSortField(params.sortField);
+  const sortDirection = parseSortDirection(params.sortDirection);
+  const isAscending = sortDirection === "asc";
   const requestedPage = Number(params.page || "1");
   const currentPage = Number.isFinite(requestedPage) && requestedPage > 0 ? Math.floor(requestedPage) : 1;
   const canManage = profile.role === "admin";
@@ -78,24 +105,23 @@ export default async function ContactsPage({ searchParams }: Props) {
   const to = from + PAGE_SIZE - 1;
   let query = supabase.from("contacts").select("id, full_name, city, company, phone, raw_capture, updated_at", { count: "exact" });
 
-  if (currentQuery) {
-    query = query.or(`full_name.ilike.%${currentQuery}%,company.ilike.%${currentQuery}%,phone.ilike.%${currentQuery}%,email.ilike.%${currentQuery}%`);
+  if (companyPrefix) {
+    query = query.ilike("company", `${companyPrefix}%`);
   }
 
-  if (nameOrder) {
-    query = query.order("full_name", { ascending: nameOrder === "asc", nullsFirst: false });
+  if (personPrefix) {
+    query = query.or(`full_name.ilike.${personPrefix}%,full_name.ilike.% ${personPrefix}%`);
   }
 
-  if (companyOrder) {
-    query = query.order("company", { ascending: companyOrder === "asc", nullsFirst: false });
-  }
-
-  if (!nameOrder && !companyOrder) {
-    query = query.order("updated_at", { ascending: false });
+  if (sortField === "person") {
+    query = query.order("full_name", { ascending: isAscending, nullsFirst: false });
+    query = query.order("company", { ascending: true, nullsFirst: false });
   } else {
-    query = query.order("updated_at", { ascending: false });
+    query = query.order("company", { ascending: isAscending, nullsFirst: false });
+    query = query.order("full_name", { ascending: true, nullsFirst: false });
   }
 
+  query = query.order("updated_at", { ascending: false });
   query = query.range(from, to);
 
   const { data: contacts = [], count = 0 } = await query;
@@ -206,33 +232,7 @@ export default async function ContactsPage({ searchParams }: Props) {
         {params.success ? <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{params.success}</div> : null}
         {params.error ? <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{params.error}</div> : null}
 
-        <form className="mt-6 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_220px_auto]">
-          <input
-            name="q"
-            defaultValue={currentQuery}
-            placeholder="Buscar por nombre, empresa, email o telefono"
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-teal"
-          />
-          <select
-            name="nameOrder"
-            defaultValue={nameOrder}
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-teal"
-          >
-            <option value="">Nombre</option>
-            <option value="asc">Nombre A-Z</option>
-            <option value="desc">Nombre Z-A</option>
-          </select>
-          <select
-            name="companyOrder"
-            defaultValue={companyOrder}
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-teal"
-          >
-            <option value="">Empresa</option>
-            <option value="asc">Empresa A-Z</option>
-            <option value="desc">Empresa Z-A</option>
-          </select>
-          <button className="rounded-2xl border border-slate-200 bg-sand px-4 py-3 text-sm font-semibold text-ink">Filtrar</button>
-        </form>
+        <ContactsControls companyPrefix={companyPrefix} personPrefix={personPrefix} />
       </Card>
 
       <Card>
@@ -245,13 +245,19 @@ export default async function ContactsPage({ searchParams }: Props) {
       </Card>
 
       <Card className="overflow-hidden p-0">
-        <ContactsList contacts={listItems} deleteAction={deleteContactsAction} canManage={canManage} />
+        <ContactsList
+          contacts={listItems}
+          deleteAction={deleteContactsAction}
+          canManage={canManage}
+          sortField={sortField}
+          sortDirection={sortDirection}
+        />
       </Card>
 
       {totalContacts > PAGE_SIZE ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Link
-            href={hasPreviousPage ? buildContactsPageHref(currentPage - 1, currentQuery, nameOrder, companyOrder) : "#"}
+            href={hasPreviousPage ? buildContactsPageHref(currentPage - 1, companyPrefix, personPrefix, sortField, sortDirection) : "#"}
             aria-disabled={!hasPreviousPage}
             className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
               hasPreviousPage
@@ -262,7 +268,7 @@ export default async function ContactsPage({ searchParams }: Props) {
             Anterior
           </Link>
           <Link
-            href={hasNextPage ? buildContactsPageHref(currentPage + 1, currentQuery, nameOrder, companyOrder) : "#"}
+            href={hasNextPage ? buildContactsPageHref(currentPage + 1, companyPrefix, personPrefix, sortField, sortDirection) : "#"}
             aria-disabled={!hasNextPage}
             className={`rounded-2xl px-4 py-3 text-sm font-semibold transition ${
               hasNextPage
