@@ -17,3 +17,28 @@ Recent commits use short, descriptive messages in Spanish and focus on one chang
 
 ## Security & Configuration Tips
 Never commit real secrets. Keep local credentials in `.env.local` and update `.env.example` when required variables change. Apply new database changes through `supabase/migrations/` instead of editing production tables manually.
+
+## Git rules
+- For any Git-related task, always use the `safe-git-commit` skill first.
+- Before starting code changes, check the current branch and workspace status.
+- If the branch tracks a remote branch, check whether a pull is appropriate before editing.
+- Prefer `git pull --rebase` over merge-based pull when syncing local work, unless the repo uses a different policy.
+- Never run `git commit` without my explicit confirmation.
+- Never run `git push` without my explicit confirmation.
+- Before committing:
+  1. summarize changed files,
+  2. explain what changed,
+  3. recommend whether the changes belong in one commit or multiple commits,
+  4. propose high-quality commit messages in English.
+- After a commit is created, ask whether I want to push it.
+- Do not auto-push every small change unless I explicitly ask for that behavior in this session.
+
+
+## Commit message style
+- Use imperative mood in English.
+- Be specific and professional.
+- Avoid vague messages like:
+  - update
+  - changes
+  - fixes
+  - misc
