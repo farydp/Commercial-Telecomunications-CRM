@@ -79,7 +79,7 @@ function SortControl({
   return (
     <details className="relative w-full sm:w-auto">
       <summary className="flex cursor-pointer list-none items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:bg-sand sm:justify-start">
-        <span aria-hidden="true">?</span>
+        <span aria-hidden="true"></span>
         Ordenar
       </summary>
       <div className="mt-2 w-full rounded-2xl border border-slate-200 bg-white p-3 shadow-lg sm:absolute sm:left-0 sm:z-10 sm:mt-3 sm:w-64">
